@@ -265,14 +265,20 @@ def setup_logging():
     info_handler = RotatingFileHandler('info.log', maxBytes=1048576, backupCount=5)
     info_handler.setLevel(logging.INFO)
 
+    # Create a handler for INFO level logs to stdout
+    stdout_handler = logging.StreamHandler()
+    stdout_handler.setLevel(logging.INFO)
+
     # Create formatters and add them to the handlers
     formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
     debug_handler.setFormatter(formatter)
     info_handler.setFormatter(formatter)
+    stdout_handler.setFormatter(formatter)
 
     # Add handlers to the logger
     logger.addHandler(debug_handler)
     logger.addHandler(info_handler)
+    logger.addHandler(stdout_handler)
 
 if __name__ == "__main__":
     global model_path
