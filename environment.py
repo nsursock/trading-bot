@@ -36,7 +36,7 @@ class CryptoTradingEnv(gym.Env):
         self.observation_space = spaces.Box(low=-np.inf, high=np.inf, shape=obs_shape, dtype=np.float32)
         
         self.cooldown_period = params['cooldown_period']
-        self.cooldown_counter = 0  # Initialize cooldown counter
+        self.cooldown_counters = [0] * self.data.shape[1]  # Initialize cooldown counters for each symbol
         
         self.rewards = []
         self.actions = []
@@ -69,7 +69,7 @@ class CryptoTradingEnv(gym.Env):
         self.current_step = 0
         self.balance = self.initial_balance
         self.positions = [{} for _ in range(self.data.shape[1])]  # Initialize positions as a list of dictionaries
-        self.cooldown_counter = 0  # Reset cooldown counter
+        self.cooldown_counters = [0] * self.data.shape[1]  # Reset cooldown counters for each symbol
         return self._get_observation(), {}
 
 
@@ -233,7 +233,7 @@ class CryptoTradingEnv(gym.Env):
                 'pnl': 0.0  # Initialize PnL
             }
             self.balance -= risk_amount
-            self.cooldown_counter = self.cooldown_period  # Set cooldown
+            self.cooldown_counters[i] = self.cooldown_period  # Set cooldown for the symbol
             
         return risk_amount, leverage, tp_price, sl_price
             
@@ -384,12 +384,11 @@ class CryptoTradingEnv(gym.Env):
         
         self._handle_tp_sl_liq(current_prices)  # Handle TP, SL, and liquidation before processing new actions
         
-        if self.cooldown_counter > 0:
-            self.cooldown_counter -= 1  # Decrement cooldown counter
-            action = [act if act == 0 or act == 3 else 0 for act in action]  # Override actions to hold if cooldown is active
-            # print(f"Action overridden due to cooldown: {action}")  # Debug print for cooldown
-        
         for i, act in enumerate(action):
+            if self.cooldown_counters[i] > 0:
+                self.cooldown_counters[i] -= 1  # Decrement cooldown counter for each symbol
+                act = 0 if act != 3 else act  # Override actions to hold if cooldown is active for the symbol
+            
             if act == 1:  # Buy (Long)
                 # Ensure index i is within bounds for current_prices
                 if i >= len(current_prices):
@@ -397,6 +396,7 @@ class CryptoTradingEnv(gym.Env):
                 collateral, leverage, tp_price, sl_price = self._open_position(i, current_prices[i], 'long')
                 infos[self.symbols[i]] = { 'type': 'open_long', 'collateral': collateral, 'leverage': leverage, 'tp_price': tp_price, 'sl_price': sl_price }
                 # print(f"Buy (Long) action taken for {self.symbols[i]}: {infos[self.symbols[i]]}")
+                self.cooldown_counters[i] = self.cooldown_period  # Set cooldown for the symbol
         
             elif act == 2:  # Sell (Short)
                 if i >= len(current_prices):
@@ -404,6 +404,7 @@ class CryptoTradingEnv(gym.Env):
                 collateral, leverage, tp_price, sl_price = self._open_position(i, current_prices[i], 'short')
                 infos[self.symbols[i]] = { 'type': 'open_short', 'collateral': collateral, 'leverage': leverage, 'tp_price': tp_price, 'sl_price': sl_price }
                 # print(f"Sell (Short) action taken for {self.symbols[i]}: {infos[self.symbols[i]]}")
+                self.cooldown_counters[i] = self.cooldown_period  # Set cooldown for the symbol
         
             elif act == 3:  # Close
                 if self.positions[i]:
@@ -596,4 +597,5 @@ class CryptoTradingEnv(gym.Env):
             'tp_atr': self.tp_atr_count,
             'tp_percentage': self.tp_percentage_count
         }
+
 
