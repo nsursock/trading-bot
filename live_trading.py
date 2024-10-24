@@ -175,7 +175,7 @@ def on_open(ws):
     from parameters import create_financial_params, selected_params
     
     financial_params = create_financial_params(selected_params)
-    # financial_params['interval'] = '1m'  # for debugging
+    financial_params['interval'] = '1m'  # for debugging
     # financial_params['cooldown_period'] = 2
     financial_params['risk_per_trade'] = 0.018
     financial_params['initial_balance'] = 5000
