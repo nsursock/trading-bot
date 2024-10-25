@@ -306,26 +306,33 @@ def open_trade(latest_close_price, pairs, symbol, action, collateral=200, levera
         # latest_close_price = data.iloc[-1]['close']  # Use .iloc for positional indexing
         logging.debug(f'Latest close price: {latest_close_price}')  # Debug print for price
         
+        tp_percentage = 0.25
+        sl_percentage = 0.1
+        
         # Validate TP and SL values
         if tp_price < 0 or sl_price < 0:
             logging.warning("TP and SL prices must be greater than 0.")
-            tp_price = 0
-            sl_price = 0
+            if action == 'open_long':
+                tp_price = latest_close_price * (1 + tp_percentage)
+                sl_price = latest_close_price * (1 - sl_percentage) 
+            else:
+                sl_price = latest_close_price * (1 + sl_percentage)
+                tp_price = latest_close_price * (1 - tp_percentage)
         
         if action == 'open_long':
             if tp_price <= latest_close_price:
                 logging.warning("TP price must be greater than the latest close price for a long position.")
-                tp_price = 0
+                tp_price = latest_close_price * (1 + tp_percentage)
             if sl_price >= latest_close_price:
                 logging.warning("SL price must be less than the latest close price for a long position.")
-                sl_price = 0
+                sl_price = latest_close_price * (1 - sl_percentage)
         elif action == 'open_short':
             if tp_price >= latest_close_price:
                 logging.warning("TP price must be less than the latest close price for a short position.")
-                tp_price = 0
+                tp_price = latest_close_price * (1 - tp_percentage)
             if sl_price <= latest_close_price:
                 logging.warning("SL price must be greater than the latest close price for a short position.")
-                sl_price = 0
+                sl_price = latest_close_price * (1 + sl_percentage)
 
         _trade = {
             'user': wallet_address,
