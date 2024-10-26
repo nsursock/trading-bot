@@ -15,6 +15,8 @@ import random
 import torch
 import glob
 from sklearn.linear_model import LogisticRegression
+from sklearn.ensemble import AdaBoostClassifier
+from sklearn.tree import DecisionTreeClassifier
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
@@ -167,6 +169,12 @@ def run_multiple_tests(test_data, mapping, timestamps, valid_symbols, model_dir,
     if action_selection_method == 'stacking':
         meta_model = LogisticRegression()
 
+    # Initialize a simple boosting model for boosting
+    if action_selection_method == 'boosting':
+        # Use a decision stump as the base estimator
+        base_estimator = DecisionTreeClassifier(max_depth=1)
+        boosting_model = AdaBoostClassifier(estimator=base_estimator, n_estimators=20, algorithm='SAMME')
+
     # Perform feature analysis only once
     if feature_method != 'none':
         perform_feature_analysis(test_data, mapping, valid_symbols, models[0], params, test_run_dir, feature_method)
@@ -201,29 +209,32 @@ def run_multiple_tests(test_data, mapping, timestamps, valid_symbols, model_dir,
                 # Convert actions to a format suitable for the meta-model
                 actions_array = np.array(actions).reshape(len(actions), -1)
                 
-                # Train the meta-model on the aggregated actions
-                # Modify this to work with models instead of symbols
-                # Here, we assume that the target is the action with the highest confidence across all models
-                # This is a placeholder logic; adjust it based on your specific requirements
+                # Determine targets (ensure this logic is correct for your use case)
                 targets = np.array([np.argmax(action) for action in actions_array.T])  # Transpose to focus on models
 
-                meta_model.fit(actions_array.T, targets)
+                # Check if there are at least two classes
+                if len(np.unique(targets)) > 1:
+                    meta_model.fit(actions_array.T, targets)
+                    
+                    # Predict the final action for each symbol using the meta-model
+                    predicted_actions = []
+                    for symbol_idx in range(len(valid_symbols)):
+                        # Extract actions for the current symbol across all models
+                        symbol_actions = actions_array[:, symbol_idx]
+                        # Predict the action for the current symbol
+                        predicted_action = meta_model.predict(symbol_actions.reshape(1, -1))
+                        predicted_actions.append(predicted_action[0])  # Ensure it's a scalar
+
+                    # Ensure the predicted actions form an array of length num_symbols
+                    action = np.array(predicted_actions)  # Convert to array
+
+                else:
+                    logging.warning("Insufficient class diversity in targets. Using default action.")
+                    # Use a default action, e.g., an array of zeros
+                    action = np.zeros(len(valid_symbols), dtype=int)
                 
-                # Predict the final action for each symbol using the meta-model
-                predicted_actions = []
-                for symbol_idx in range(len(valid_symbols)):
-                    # Extract actions for the current symbol across all models
-                    symbol_actions = actions_array[:, symbol_idx]
-                    # Predict the action for the current symbol
-                    predicted_action = meta_model.predict(symbol_actions.reshape(1, -1))
-                    predicted_actions.append(predicted_action[0])  # Ensure it's a scalar
-
-                # Ensure the predicted actions form an array of length num_symbols
-                action = np.array(predicted_actions)  # Convert to array
-
                 # Clip the predicted actions to be within the range [0, 3]
                 action = np.clip(action, 0, 3)
-
                 action = [action]
             
             elif action_selection_method == 'voting':
@@ -243,6 +254,38 @@ def run_multiple_tests(test_data, mapping, timestamps, valid_symbols, model_dir,
             
             elif action_selection_method == 'minimizing':
                 action = np.min(actions, axis=0)
+            
+            elif action_selection_method == 'boosting':
+                # Convert actions to a format suitable for the boosting model
+                actions_array = np.array(actions).reshape(len(actions), -1)
+                
+                # Determine targets (ensure this logic is correct for your use case)
+                targets = np.array([np.argmax(action) for action in actions_array.T])  # Transpose to focus on models
+
+                # Check if there are at least two classes
+                if len(np.unique(targets)) > 1:
+                    boosting_model.fit(actions_array.T, targets)
+                    
+                    # Predict the final action for each symbol using the boosting model
+                    predicted_actions = []
+                    for symbol_idx in range(len(valid_symbols)):
+                        # Extract actions for the current symbol across all models
+                        symbol_actions = actions_array[:, symbol_idx]
+                        # Predict the action for the current symbol
+                        predicted_action = boosting_model.predict(symbol_actions.reshape(1, -1))
+                        predicted_actions.append(predicted_action[0])  # Ensure it's a scalar
+
+                    # Ensure the predicted actions form an array of length num_symbols
+                    action = np.array(predicted_actions)  # Convert to array
+
+                else:
+                    logging.warning("Insufficient class diversity in targets. Using default action.")
+                    # Use a default action, e.g., an array of zeros
+                    action = np.zeros(len(valid_symbols), dtype=int)
+                
+                # Clip the predicted actions to be within the range [0, 3]
+                action = np.clip(action, 0, 3)
+                action = [action]
             
             else:
                 raise ValueError(f"Unknown action selection method: {action_selection_method}")
@@ -335,7 +378,7 @@ if __name__ == "__main__":
     parser.add_argument('-n', '--num_tests', type=int, default=1, help='Number of tests for evaluation')
     parser.add_argument('-f', '--feature_method', choices=['none', 'shap', 'perm', 'grad', 'tree'], default='none',
                         help="Method to calculate feature importance")
-    parser.add_argument('-a', '--action_selection_method', choices=['bagging', 'stacking', 'voting', 'averaging', 'mediating', 'maximizing', 'minimizing', 'all'], default='all',
+    parser.add_argument('-a', '--action_selection_method', choices=['boosting', 'bagging', 'stacking', 'voting', 'averaging', 'mediating', 'maximizing', 'minimizing', 'all'], default='all',
                         help="Method to aggregate actions from multiple models")
     args = parser.parse_args()
 
@@ -345,7 +388,7 @@ if __name__ == "__main__":
     # financial_params['boost_leverage'] = False
     financial_params['symbols'] = ['GAINS_20']
     # financial_params['interval'] = '4h'
-    # financial_params['limit'] = 250 
+    financial_params['limit'] = 2400 
     # financial_params['leverage_max'] = 1
     # financial_params['leverage_min'] = 1
     # financial_params['risk_per_trade'] = 0.01
@@ -374,9 +417,9 @@ if __name__ == "__main__":
             sys.exit(1)
         
         # Split data into training and testing sets
-        # split_index = int(len(data) * 0.5)
-        test_data = data #[split_index:]
-        test_timestamps = timestamps #[split_index:]
+        split_index = int(len(data) * financial_params['data_split'])
+        test_data = data[split_index:]
+        test_timestamps = timestamps[split_index:]
 
         model_dir = args.model_dir
 
@@ -390,7 +433,7 @@ if __name__ == "__main__":
             feature_method = args.feature_method
             
         if args.action_selection_method == 'all':
-            action_methods = ['bagging', 'stacking', 'voting', 'averaging', 'mediating', 'maximizing', 'minimizing']
+            action_methods = ['boosting', 'bagging', 'stacking', 'voting', 'averaging', 'mediating', 'maximizing', 'minimizing']
             for method in action_methods:
                 logging.info(f"Running tests with action selection method: {method}")
                 run_multiple_tests(test_data, mapping, test_timestamps, valid_symbols, model_dir, financial_params, num_tests, feature_method, method)
@@ -404,3 +447,4 @@ if __name__ == "__main__":
         # logging.info(f"Test Performance Score: {performance_score}%")
     else:
         logging.error("Data preparation failed. Exiting.")
+

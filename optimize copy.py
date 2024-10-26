@@ -59,7 +59,7 @@ def train_and_evaluate(kelly_fraction, tp_atr_mult, sl_atr_mult, tp_percentage, 
     
     total_timesteps = int(total_timesteps)
     risk_per_trade = float(risk_per_trade)
-    interval = ['1m', '3m', '5m', '15m', '30m', '1h', '2h', '4h', '6h', '8h', '12h', '1d'][int(round(interval))]
+    interval = ['1m', '3m', '5m', '15m', '30m', '1h', '2h', '4h', '6h', '8h', '12h', '1d', '3d', '1w', '1M'][int(round(interval))]
     limit = int(limit)
     initial_balance = float(initial_balance)
     cooldown_period = int(cooldown_period)
@@ -145,7 +145,7 @@ def optimize_hyperparameters(init_points, n_iter, process_length, n_splits):
         'initial_balance': (5_000, 10_000),
         'cooldown_period': (1, 20),
         'leverage_min': (1, 20),
-        'leverage_max': (20, 150),
+        'leverage_max': (20, 200),
         'n_steps_index': (0, 3),  # Index for n_steps
         'batch_size_index': (0, 3),  # Index for batch sizes
         'n_epochs': (3, 30),
@@ -168,7 +168,7 @@ def optimize_hyperparameters(init_points, n_iter, process_length, n_splits):
             'sl_percentage': (0.01, 0.2),
             'total_timesteps': (20_000, 100_000),
             'risk_per_trade': (0.01, 0.05),
-            'interval': (0, 11),
+            'interval': (0, 5),
             'limit': (500, 1000),
             'initial_balance': (1_000, 10_000),
             'cooldown_period': (1, 50),

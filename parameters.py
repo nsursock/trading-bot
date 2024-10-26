@@ -118,9 +118,18 @@ possible_intervals = ['1m', '3m', '5m', '15m', '30m', '1h', '2h', '4h', '6h', '8
 # params3 = {'target': 24.05, 'params': {'cooldown_period': 16.133497140466723, 'initial_balance': 23878.713781093604, 'interval': 6.471178049207773, 'leverage_max': 64.09585507025832, 'leverage_min': 6.22298476704464, 'limit': 448.5423535633668, 'risk_per_trade': 0.012187497377328809, 'total_timesteps': 26699.701458320284}}
 # params4 = {'target': 22.25, 'params': {'cooldown_period': 14.701103293927659, 'initial_balance': 21755.368772224534, 'interval': 7.887067966962987, 'leverage_max': 71.98669767085607, 'leverage_min': 7.821665097406508, 'limit': 396.51126442727264, 'risk_per_trade': 0.1764089025067637, 'total_timesteps': 78038.84737917819}}
 # params5 = {'target': 19.07, 'params': {'cooldown_period': 8.050637720476072, 'initial_balance': 16474.846958223494, 'interval': 2.6799062958270614, 'leverage_max': 102.15012268259142, 'leverage_min': 19.27330917518158, 'limit': 643.0903282111348, 'risk_per_trade': 0.11148101492021657, 'total_timesteps': 48727.4433203517}}
+
+from dotenv import load_dotenv
+import os
+
+load_dotenv()  # Load environment variables from .env file
+
 constant_params = {
     'symbols': ['BTC', 'ETH', 'BNB', 'SOL', 'NEAR', 'FTM', 'ADA', 'LINK', 'SHIB', 'BONK'],
     'min_collateral': 50,  # TODO check if it works
+    'period_start': os.getenv('PERIOD_START'),
+    'period_end': os.getenv('PERIOD_END'),
+    'data_split': float(os.getenv('DATA_SPLIT')),
 }
 
 def create_financial_params(params):
@@ -153,6 +162,9 @@ def create_financial_params(params):
 
     financial_params['symbols'] = constant_params['symbols']
     financial_params['min_collateral'] = constant_params['min_collateral']
+    financial_params['period_start'] = constant_params['period_start']
+    financial_params['period_end'] = constant_params['period_end']
+    financial_params['data_split'] = constant_params['data_split']
     # financial_params['confidence_level'] = 0.9
     # financial_params['target_var'] = 0.1
     return financial_params

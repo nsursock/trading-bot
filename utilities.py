@@ -2,6 +2,7 @@ import requests
 import pandas as pd
 import unittest
 import logging
+import time
 import numpy as np
 import ta
 import warnings
@@ -357,15 +358,113 @@ def compute_liquidation_price(entry_price, leverage, position_type):
 #     # logging.debug(f"Computed SL: {sl_price} for entry price: {entry_price}, position type: {position_type}, ATR: {atr_value}")
 #     return sl_price
 
+def fetch_binance_klines_extended(symbol, interval, limit, start_date=None, end_date=None):
+    logging.info(f"Fetching extended klines for symbol: {symbol}, interval: {interval}, from {start_date} to {end_date}, limit: {limit}")
+    
+    url = "https://api.binance.com/api/v3/klines"
+    all_data = []
+    max_candles_per_request = 1000
+    
+    # Compute start and end timestamps if not provided
+    if start_date is None and end_date is None:
+        # Fetch the most recent candles first
+        params = {
+            'symbol': symbol,
+            'interval': interval,
+            'limit': min(max_candles_per_request, limit)
+        }
+        response = requests.get(url, params=params)
+        data = response.json()
+        
+        if not data:
+            logging.warning(f"No data for symbol: {symbol}.")
+            return None
+        
+        all_data.extend(data)
+        
+        # If more data is needed, continue fetching older data
+        while len(all_data) < limit:
+            # Set the endTime to the timestamp of the first candle in the last batch
+            params['endTime'] = all_data[0][0] - 1
+            params['limit'] = min(max_candles_per_request, limit - len(all_data))
+            
+            response = requests.get(url, params=params)
+            data = response.json()
+            
+            if not data:
+                logging.warning(f"No more data available for symbol: {symbol}.")
+                break
+            
+            all_data = data + all_data  # Prepend new data to the existing list
+            
+            # Sleep to avoid hitting the rate limit
+            time.sleep(0.1)
+    else:
+        # Existing logic for fetching data within a date range
+        start_timestamp = int(pd.to_datetime(start_date).timestamp() * 1000)
+        end_timestamp = int(pd.to_datetime(end_date).timestamp() * 1000)
+        
+        while start_timestamp < end_timestamp and len(all_data) < limit:
+            candles_to_fetch = min(max_candles_per_request, limit - len(all_data))
+            
+            params = {
+                'symbol': symbol,
+                'interval': interval,
+                'startTime': start_timestamp,
+                'endTime': end_timestamp,
+                'limit': candles_to_fetch
+            }
+            response = requests.get(url, params=params)
+            data = response.json()
+            
+            if not data:
+                logging.warning(f"No data for symbol: {symbol} in the given range.")
+                break
+            
+            all_data.extend(data)
+            
+            # Update start_timestamp to the timestamp of the last candle + 1 ms
+            start_timestamp = data[-1][0] + 1
+            
+            # Sleep to avoid hitting the rate limit
+            time.sleep(0.1)
+    
+    if not all_data:
+        logging.error(f"Failed to fetch data for symbol: {symbol}.")
+        return None
+    
+    df = pd.DataFrame(all_data, columns=[
+        'timestamp', 'open', 'high', 'low', 'close', 'volume', 
+        'close_time', 'quote_asset_volume', 'number_of_trades', 
+        'taker_buy_base_asset_volume', 'taker_buy_quote_asset_volume', 'ignore'
+    ])
+    df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
+    
+    # Convert relevant columns to numeric types
+    df[['open', 'high', 'low', 'close', 'volume']] = df[['open', 'high', 'low', 'close', 'volume']].apply(pd.to_numeric)
+    
+    df = df[['timestamp', 'open', 'high', 'low', 'close', 'volume']]
+    df.set_index('timestamp', inplace=True)
+    logging.debug(f"Extended DataFrame for {symbol}:\n{df.head()}")
+    
+     # Add technical indicators
+    df = add_technical_indicators(df)
+    logging.debug(f"DataFrame with technical indicators for {symbol}:\n{df.head()}")
+    
+    return df
+
 class TestUtils(unittest.TestCase):
 
     def setUp(self):
-        self.symbols = ['BTC', 'ETH', 'BNB', 'SOL', 'NEAR', 'FTM', 'ADA', 'LINK', 'SHIB', 'BONK']
-        self.dfs = [fetch_binance_klines(symbol + 'USDT', '1h', 100) for symbol in self.symbols]
+        self.num_candles = 1200
+        self.symbols = ['BTC', 'ETH', 'BNB'] #, 'SOL', 'NEAR', 'FTM', 'ADA', 'LINK', 'SHIB', 'BONK']
+        # self.dfs = [fetch_binance_klines(symbol + 'USDT', '1h', 100) for symbol in self.symbols]
+        # self.dfs = [fetch_binance_klines_extended(symbol + 'USDT', '1d', self.num_candles) for symbol in self.symbols]
+        self.dfs = [fetch_binance_klines_extended(symbol + 'USDT', '1m', self.num_candles, '2024-01-01', '2024-04-05') for symbol in self.symbols]
 
     def test_preprocess_data(self):
-        matrix, _ = preprocess_data(self.dfs, self.symbols)
-        self.assertEqual(matrix.shape, (100, len(self.symbols), 6))  # 100 timestamps, 2 symbols, 6 features
+        matrix, _, _ = preprocess_data(self.dfs, self.symbols)
+        self.assertEqual(matrix.shape, (self.num_candles, len(self.symbols), 25))  # 100 timestamps, 2 symbols, 25 features
         
         # Check for NaN values in the matrix
         self.assertFalse(np.any(np.isnan(matrix)), "Data contains NaN values.")
@@ -397,3 +496,4 @@ class TestUtils(unittest.TestCase):
         
 if __name__ == '__main__':
     unittest.main()
+

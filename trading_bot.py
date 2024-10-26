@@ -44,7 +44,7 @@ import random
 
 def prepare(params):
     logging.info('Started fetching...')
-    from utilities import fetch_binance_klines, preprocess_data  # Import the required functions
+    from utilities import fetch_binance_klines_extended, fetch_binance_klines, preprocess_data  # Import the required functions
 
     symbols = sorted(params['symbols'])
     interval = params['interval']
@@ -87,7 +87,7 @@ def prepare(params):
 
     for symbol in symbols:
         try:
-            df = fetch_binance_klines(symbol + 'USDT', interval, limit)
+            df = fetch_binance_klines_extended(symbol + 'USDT', interval, limit, params['period_start'] or None, params['period_end'] or None)
             if not df.empty:
                 time_range = (df.index.min(), df.index.max())
                 time_ranges.append(time_range)
@@ -353,7 +353,10 @@ def main():
     logging.info("Script started")
     os.system('say "Dear Mr Sursock, the script has started"')
     
-    # financial_params['total_timesteps'] = 5000 
+    # financial_params['total_timesteps'] = 20000
+    financial_params['limit'] = 2400
+    
+    log_parameters(financial_params)
     
     data, mapping, valid_symbols, timestamps, _ = prepare(financial_params)
     valid_symbols = sorted(valid_symbols)
@@ -365,7 +368,7 @@ def main():
             raise ValueError("Data must be a 3D numpy array after conversion.")
 
         # Split data into training and testing sets
-        split_index = int(len(data) * 0.8)  # 80% for training, 20% for testing
+        split_index = int(len(data) * financial_params['data_split']) 
         train_data = data[:split_index]
         test_data = data[split_index:]
         train_timestamps = timestamps[:split_index]
@@ -374,10 +377,10 @@ def main():
         # Train ensemble of models
         models, output_dir = train_ensemble(train_data, mapping, valid_symbols, train_timestamps, financial_params)
         
-        if models:
-            # Test ensemble of models
-            test_performance_score, _ = test_ensemble(models, test_data, mapping, test_timestamps, valid_symbols, output_dir, financial_params)
-            logging.info(f"Ensemble Test Performance Score: {test_performance_score:.2f}%")
+        # if models:
+        #     # Test ensemble of models
+        #     test_performance_score, _ = test_ensemble(models, test_data, mapping, test_timestamps, valid_symbols, output_dir, financial_params)
+        #     logging.info(f"Ensemble Test Performance Score: {test_performance_score:.2f}%")
 
     os.system('say "Dear Mr Sursock, the script has finished"')
     logging.info("Script finished")

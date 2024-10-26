@@ -83,6 +83,17 @@ class CryptoTradingEnv(gym.Env):
                 sl_price = position['sl_price']
                 liq_price = position['liq_price']
                 
+                # Calculate unrealized PnL
+                if position['type'] == 'long':
+                    unrealized_pnl = (current_prices[i] - position['entry_price']) / position['entry_price']
+                elif position['type'] == 'short':
+                    unrealized_pnl = (position['entry_price'] - current_prices[i]) / position['entry_price']
+                
+                # Check if unrealized PnL reaches 900%
+                if unrealized_pnl >= 9.0:
+                    self._close_position(i, current_prices[i], 'tp9')
+                    continue  # Skip further checks if position is closed
+                
                 if position['type'] == 'long':
                     if np.all(current_prices[i] >= tp_price):
                         self._close_position(i, current_prices[i], 'tp')
@@ -90,6 +101,8 @@ class CryptoTradingEnv(gym.Env):
                         self._close_position(i, current_prices[i], 'liq')
                     elif np.all(current_prices[i] <= sl_price):
                         self._close_position(i, current_prices[i], 'sl')
+                        # Open a hedge position in the opposite direction
+                        self._open_position(i, current_prices[i], 'short')
                 elif position['type'] == 'short':
                     if np.all(current_prices[i] <= tp_price):
                         self._close_position(i, current_prices[i], 'tp')
@@ -97,6 +110,8 @@ class CryptoTradingEnv(gym.Env):
                         self._close_position(i, current_prices[i], 'liq')
                     elif np.all(current_prices[i] >= sl_price):
                         self._close_position(i, current_prices[i], 'sl')
+                        # Open a hedge position in the opposite direction
+                        self._open_position(i, current_prices[i], 'long')
 
     def _close_position(self, index, current_price, reason='other'):
         position = self.positions[index]
@@ -597,5 +612,7 @@ class CryptoTradingEnv(gym.Env):
             'tp_atr': self.tp_atr_count,
             'tp_percentage': self.tp_percentage_count
         }
+
+
 
 
